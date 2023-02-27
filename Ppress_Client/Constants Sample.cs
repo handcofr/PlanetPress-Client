@@ -1,6 +1,6 @@
 ﻿namespace Ppress_Lib
 {
-    internal class Constants
+    internal class ConstantsSample
     {
 
         internal const string ServerUrl = "http://myserver:9340";
