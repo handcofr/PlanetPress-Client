@@ -81,7 +81,11 @@ namespace Ppress_Lib.Services
                 if (!resp.IsSuccessStatusCode)
                     throw new Exception("OutputCreation is unable to get result");
 
-                await resp.Content.CopyToAsync(streamResult);
+                using (Stream contentStream = await resp.Content.ReadAsStreamAsync())
+                {
+                    await contentStream.CopyToAsync(streamResult);
+                }
+                
 
                 return "OK";
             }
