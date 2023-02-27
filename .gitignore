@@ -362,3 +362,4 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /Ppress_Client/Constants.cs
+/Ppress_Client/Samples/test_prevision.xml
