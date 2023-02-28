@@ -28,6 +28,12 @@ namespace Ppress_Client
             int fileId = await client.Services.FileStore.UploadDataFileAsync(filename);
             Logger.log($"FileStore UploadDataFile \tResult File Manager ID={fileId}");
 
+            Logger.log($"FileStore UploadDataFile \t\"{filename}\" as Stream");
+            FileStream fileStream = File.OpenRead(filename);
+            fileId = await client.Services.FileStore.UploadDataStreamAsync(fileStream);
+            fileStream.Close();
+            Logger.log($"FileStore UploadDataFile \tResult File Manager ID={fileId}");
+
             string mapper = Constants.DataMapper;
             int DataSetId = await client.Services.DataMapping.Process(fileId.ToString(), mapper,
                 processEvent: ProcessSend, progressEvent: ProcessProgress);

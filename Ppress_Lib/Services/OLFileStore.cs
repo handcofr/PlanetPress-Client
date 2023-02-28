@@ -30,7 +30,7 @@ namespace Ppress_Lib.Services
 
             UriBuilder uriBuilder = new($"{serviceUrl}DataFile");
             NameValueCollection query = HttpUtility.ParseQueryString(uriBuilder.Query);
-            if (persistent) query.Add("persisent", "true");
+            if (persistent) query.Add("persisent", persistent.ToString());
             if (named) query.Add("filename", fileInfo.Name);
             uriBuilder.Query = query.ToString();
             using HttpClient http = client.GetHttpClientInstance();
@@ -41,6 +41,42 @@ namespace Ppress_Lib.Services
             {
                 StringContent content = new(await File.ReadAllTextAsync(filename),
                     Encoding.UTF8, "application/octet-stream");
+                using HttpResponseMessage resp = await http.PostAsync(uriBuilder.ToString(), content);
+                string buffer1 = resp.Content.ReadAsStringAsync().Result;
+                return int.Parse(resp.EnsureSuccessStatusCode().Content.ReadAsStringAsync().Result);
+            }
+            catch (HttpRequestException)
+            {
+                throw new Exception("Unable to upload file to server");
+            }
+
+        }
+
+        /// <summary>
+        /// Upload data stream to FileStore
+        /// </summary>
+        /// <param name="stream"></param>
+        /// <param name="persistent"></param>
+        /// <param name="named"></param>
+        /// <returns>The ID of file</returns>
+        /// <exception cref="FileNotFoundException"></exception>
+        /// <exception cref="Exception"></exception>
+        public async Task<int> UploadDataStreamAsync(Stream stream, bool persistent = false)
+        {
+
+            EnsureSessionActive();
+
+            UriBuilder uriBuilder = new($"{serviceUrl}DataFile");
+            NameValueCollection query = HttpUtility.ParseQueryString(uriBuilder.Query);
+            if (persistent) query.Add("persisent", persistent.ToString());
+            uriBuilder.Query = query.ToString();
+            using HttpClient http = client.GetHttpClientInstance();
+            using HttpRequestMessage req = new();
+            req.Headers.Add("processData", "false");
+
+            try
+            {
+                StreamContent content = new(stream);
                 using HttpResponseMessage resp = await http.PostAsync(uriBuilder.ToString(), content);
                 string buffer1 = resp.Content.ReadAsStringAsync().Result;
                 return int.Parse(resp.EnsureSuccessStatusCode().Content.ReadAsStringAsync().Result);
