@@ -1,7 +1,4 @@
-﻿using System.Net.Http.Headers;
-using System.Web;
-
-namespace Ppress_Lib.Services
+﻿namespace Ppress_Lib.Services
 {
     public class OLOutputCreation : OLClientServiceBase
     {

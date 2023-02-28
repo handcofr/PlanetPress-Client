@@ -11,4 +11,10 @@
     <ProjectReference Include="..\Ppress_Lib\Ppress_Lib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Samples\test_prevision.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Ppress_Lib.Services
+﻿namespace Ppress_Lib.Services
 {
     public class OLClientServiceBase
     {

@@ -1,4 +1,4 @@
-﻿using Ppress_Client;
+﻿using Ppress_Lib.Services;
 using System.Net.Http.Headers;
 
 namespace Ppress_Lib
