@@ -1,4 +1,7 @@
 ﻿using System.Collections.Specialized;
+using System.IO;
+using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text;
 using System.Web;
 
@@ -6,89 +9,73 @@ namespace Ppress_Lib.Services
 {
     public class OLFileStore : OLClientServiceBase
     {
+        private readonly ISet<long> uploadedFiles = new HashSet<long>();
+
         public OLFileStore(OLClient client)
             : base("filestore", client)
         {
         }
 
         /// <summary>
-        /// Upload data file to FileStore
+        /// Upload arbitrary file to FileStore
         /// </summary>
-        /// <param name="filename"></param>
+        /// <param name="path"></param>
         /// <param name="persistent"></param>
         /// <param name="named"></param>
         /// <returns>The ID of file</returns>
         /// <exception cref="FileNotFoundException"></exception>
         /// <exception cref="Exception"></exception>
-        public async Task<int> UploadDataFileAsync(string filename, bool persistent = false, bool named = false)
+        public async Task<long> UploadFileAsync(string path, bool persistent = false)
         {
-            if (!File.Exists(filename))
-                throw new FileNotFoundException(filename);
-
             EnsureSessionActive();
-            FileInfo fileInfo = new(filename);
 
-            UriBuilder uriBuilder = new($"{serviceUrl}DataFile");
+            String urlPath, mimeType;
+            switch (new FileInfo(path).Extension)
+            {
+                case ".OL-template":
+                    urlPath = "template";
+                    mimeType = "application/zip";
+                    break;
+                case ".OL-jobpreset":
+                    urlPath = "JobCreationConfig";
+                    mimeType = "application/xml";
+                    break;
+                case ".OL-outputpreset":
+                    urlPath = "OutputCreationConfig";
+                    mimeType = "application/xml";
+                    break;
+                case ".OL-datamapper":
+                    urlPath = "DataMiningConfig";
+                    mimeType = "application/octet-stream";
+                    break;
+                default:
+                    urlPath = "DataFile";
+                    mimeType = "application/octet-stream";
+                    break;
+            }
+
+            UriBuilder uriBuilder = new($"{serviceUrl}{urlPath}");
             NameValueCollection query = HttpUtility.ParseQueryString(uriBuilder.Query);
-            if (persistent) query.Add("persisent", persistent.ToString());
-            if (named) query.Add("filename", fileInfo.Name);
+            if (persistent) query.Add("persistent", persistent.ToString());
             uriBuilder.Query = query.ToString();
             using HttpClient http = client.GetHttpClientInstance();
-            using HttpRequestMessage req = new();
-            req.Headers.Add("processData", "false");
 
             try
             {
-                StringContent content = new(await File.ReadAllTextAsync(filename),
-                    Encoding.UTF8, "application/octet-stream");
+                StreamContent content = new(File.OpenRead(path));
+                content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
                 using HttpResponseMessage resp = await http.PostAsync(uriBuilder.ToString(), content);
-                string buffer1 = resp.Content.ReadAsStringAsync().Result;
-                return int.Parse(resp.EnsureSuccessStatusCode().Content.ReadAsStringAsync().Result);
+                long id = long.Parse(resp.EnsureSuccessStatusCode().Content.ReadAsStringAsync().Result);
+                uploadedFiles.Add(id);
+                return id;
             }
             catch (HttpRequestException)
             {
                 throw new Exception("Unable to upload file to server");
             }
-
         }
 
-        /// <summary>
-        /// Upload data stream to FileStore
-        /// </summary>
-        /// <param name="stream"></param>
-        /// <param name="persistent"></param>
-        /// <param name="named"></param>
-        /// <returns>The ID of file</returns>
-        /// <exception cref="FileNotFoundException"></exception>
-        /// <exception cref="Exception"></exception>
-        public async Task<int> UploadDataStreamAsync(Stream stream, bool persistent = false)
-        {
-
-            EnsureSessionActive();
-
-            UriBuilder uriBuilder = new($"{serviceUrl}DataFile");
-            NameValueCollection query = HttpUtility.ParseQueryString(uriBuilder.Query);
-            if (persistent) query.Add("persisent", persistent.ToString());
-            uriBuilder.Query = query.ToString();
-            using HttpClient http = client.GetHttpClientInstance();
-            using HttpRequestMessage req = new();
-            req.Headers.Add("processData", "false");
-
-            try
-            {
-                StreamContent content = new(stream);
-                using HttpResponseMessage resp = await http.PostAsync(uriBuilder.ToString(), content);
-                string buffer1 = resp.Content.ReadAsStringAsync().Result;
-                return int.Parse(resp.EnsureSuccessStatusCode().Content.ReadAsStringAsync().Result);
-            }
-            catch (HttpRequestException)
-            {
-                throw new Exception("Unable to upload file to server");
-            }
-
-        }
-
-        public async Task<bool> DeleteFileAsync(int fileId)
+        public async Task<bool> DeleteFileAsync(long fileId)
         {
             EnsureSessionActive();
             using HttpClient http = client.GetHttpClientInstance($"{serviceUrl}delete/{fileId}");
@@ -101,6 +88,21 @@ namespace Ppress_Lib.Services
             catch (HttpRequestException)
             {
                 throw new Exception($"Unable to delete file {fileId}");
+            }
+        }
+
+        public async void Cleanup()
+        {
+            try
+            {
+                foreach (long id in uploadedFiles)
+                {
+                    await DeleteFileAsync(id);
+                }
+            }
+            finally
+            {
+                uploadedFiles.Clear();
             }
         }
 

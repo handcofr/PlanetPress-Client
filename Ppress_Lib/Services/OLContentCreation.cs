@@ -16,48 +16,47 @@ namespace Ppress_Lib.Services
         private OLContentCreation() : base(null, null)  { }
 
 
-        public async Task<int> Process(string dataFile, string template, bool validate = false,
+        public async Task<long> Process(string templatePath, long dataSetId, bool validate = false,
             OLEvents.SendEventHandler? processEvent = null,
             OLEvents.ProgressEventHandler? progressEvent = null)
         {
             EnsureSessionActive();
 
-            if (string.IsNullOrEmpty(dataFile) || string.IsNullOrEmpty(template))
-                throw new ArgumentException("ContentCreation Process: Bad arguments");
+            if (string.IsNullOrEmpty(templatePath) || dataSetId <= 0)
+                throw new ArgumentException("DataMiningProcess: Bad arguments");
+
+            long templateId = await client.Services.FileStore.UploadFileAsync(templatePath);
 
             if (processEvent != null) Onsend += processEvent;
             if (progressEvent != null) Onprogress += progressEvent;
             
-            int _contentId;
+            long _contentSetId;
             
             using (HttpClient http = client.GetHttpClientInstance())
             {
-                string _operationId = await SubmitAsync(http, dataFile, template, validate);
+                string _operationId = await SubmitAsync(http, templateId, dataSetId, validate);
 
                 await GetProgressAsync(http, _operationId);
 
-                _contentId = await GetResultAsync(http, _operationId);
-
+                _contentSetId = await GetResultAsync(http, _operationId);
             }
 
 
             if (processEvent != null) this.Onsend -= processEvent;
             if (progressEvent != null) Onprogress -= progressEvent;
 
-            return _contentId;
-
-
+            return _contentSetId;
         }
 
-        private async Task<string> SubmitAsync(HttpClient http, string dataFile, string template, bool validate = false)
+        private async Task<string> SubmitAsync(HttpClient http, long templateId, long dataSetId, bool validate = false)
         {
-            string _datasetId = HttpUtility.UrlEncode(dataFile);
-            string _template = HttpUtility.UrlEncode(template);
+            string _dataSetId = HttpUtility.UrlEncode(dataSetId.ToString());
+            string _templateId = HttpUtility.UrlEncode(templateId.ToString());
             string operationId;
 
             try
             {
-                HttpResponseMessage resp = await http.PostAsync($"{serviceUrl}{_template}/{_datasetId}", null);
+                HttpResponseMessage resp = await http.PostAsync($"{serviceUrl}{_templateId}/{_dataSetId}", null);
                 string buffer = resp.Content.ReadAsStringAsync().Result;
                 if (!resp.IsSuccessStatusCode) 
                     throw new Exception("ContentCreation can't process this action.");
@@ -71,18 +70,16 @@ namespace Ppress_Lib.Services
             {
                 throw new Exception("unable to process ContentCreation");
             }
-
         }
 
-        public async Task<int> GetResultAsync (HttpClient http,  string operationId)
+        public async Task<long> GetResultAsync (HttpClient http, string operationId)
         {
-
             try
             {
                 HttpResponseMessage resp = await http.PostAsync($"{serviceUrl}getResult/{operationId}", null);
                 if (!resp.IsSuccessStatusCode)
                     throw new Exception("ContentCreation is unable to get result");
-                return int.Parse(await resp.Content.ReadAsStringAsync());
+                return long.Parse(await resp.Content.ReadAsStringAsync());
             }
             catch (Exception)
             {
@@ -90,7 +87,7 @@ namespace Ppress_Lib.Services
             }
         }
 
-        public async Task<bool> GetProgressAsync (HttpClient http,  string operationId)
+        public async Task<bool> GetProgressAsync (HttpClient http, string operationId)
         {
             int retry = 0;
             bool done = false;

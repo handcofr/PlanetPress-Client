@@ -9,7 +9,7 @@ namespace Ppress_Client
             
             //Logger.log("Connection au serveur");
             OLClient client = new();
-            client.Login("http://s21-0101:9340", "rest-client", "pwfrest-client");
+            client.Login(Constants.ServerUrl, Constants.UserName, Constants.UserPassword);
 
             Logger.log($"AuthToken : {client.GetSessionToken()}");
 
@@ -21,53 +21,38 @@ namespace Ppress_Client
 
             Logger.log("FileStore Handshake \t\t" + (client.Services.FileStore.Handshake() ? "OK." : "KO."));
             Logger.log("FileStore Version \t\t" + client.Services.FileStore.ServiceVersion());
-            
 
-            string filename = Constants.DataFile;
-            Logger.log($"FileStore UploadDataFile \t\"{filename}\"");
-            int fileId = await client.Services.FileStore.UploadDataFileAsync(filename);
-            Logger.log($"FileStore UploadDataFile \tResult File Manager ID={fileId}");
 
-            Logger.log($"FileStore UploadDataFile \t\"{filename}\" as Stream");
-            FileStream fileStream = File.OpenRead(filename);
-            fileId = await client.Services.FileStore.UploadDataStreamAsync(fileStream);
-            fileStream.Close();
-            Logger.log($"FileStore UploadDataFile \tResult File Manager ID={fileId}");
-
-            string mapper = Constants.DataMapper;
-            int DataSetId = await client.Services.DataMapping.Process(fileId.ToString(), mapper,
+            string dmConfigPath = Constants.DataMapper;
+            string dataFilePath = Constants.DataFile;
+            long dataSetId = await client.Services.DataMapping.Process(dmConfigPath, dataFilePath,
                 processEvent: ProcessSend, progressEvent: ProcessProgress);
-            Logger.log($"DataMining Process\t\tFile={fileId}, Mapper={mapper}, Result DataSet ID={DataSetId}");
+            Logger.log($"DataMining Process\t\tFile={dataFilePath}, Mapper={dmConfigPath}, Result DataSet ID={dataSetId}");
 
-            string template = Constants.Template;
-            int ContentId = await client.Services.ContentCreation.Process(DataSetId.ToString(), template,
+            string templatePath = Constants.Template;
+            long contentSetId = await client.Services.ContentCreation.Process(templatePath, dataSetId,
                 processEvent: ProcessSend, progressEvent: ProcessProgress);
-            Logger.log($"ContentCreation Process\t\tDataSet={DataSetId}, Mapper={template}, Result Content ID={ContentId}");
+            Logger.log($"ContentCreation Process\t\tDataSet={dataSetId}, Template={templatePath}, Result Content ID={contentSetId}");
 
 
-            string job = Constants.JobPreset;
-
-            string[] contentIds = new string[] { ContentId.ToString() };
+            string jobPresetPath = Constants.JobPreset;
+            long[] contentSetIds = new long[] { contentSetId };
             Dictionary<string, string> parameters = new();
             parameters.Add("test1", "toto");
-            int JobId
-                = await client.Services.JobCreation.Process(contentIds, job, parameters,
-                processEvent: ProcessSend, progressEvent: ProcessProgress);
-            Logger.log($"JobCreation Process\t\t\tResult Job ID={JobId}");
-
-            string OutputPreset = Constants.OutputPreset;
+            long jobId = await client.Services.JobCreation.Process(contentSetIds, jobPresetPath,
+                parameters, processEvent: ProcessSend, progressEvent: ProcessProgress);
+            Logger.log($"JobCreation Process\t\t\tResult Job ID={jobId}");
 
             using (FileStream file = new(Constants.PDFFilename, FileMode.Create, FileAccess.Write, FileShare.None))
             {
-                await client.Services.OutputCreation.Process(JobId, OutputPreset, file,
-                processEvent: ProcessSend, progressEvent: ProcessProgress);
+                string outputPresetPath = Constants.OutputPreset;
+                await client.Services.OutputCreation.Process(outputPresetPath, jobId, file,
+                    processEvent: ProcessSend, progressEvent: ProcessProgress);
 
                 file.Close();
             }
 
-
-            bool result = await client.Services.FileStore.DeleteFileAsync(fileId);
-            Logger.log($"FileStore Delete file \t\tid={fileId} " +  (result ? "OK" : "KO"));
+            client.Services.FileStore.Cleanup();
 
             Console.WriteLine("Press any key ...");
             Console.ReadKey();
