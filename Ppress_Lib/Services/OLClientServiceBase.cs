@@ -58,7 +58,5 @@
                 throw new Exception("Unable to get service version");
             }
         }
-
-
     }
 }

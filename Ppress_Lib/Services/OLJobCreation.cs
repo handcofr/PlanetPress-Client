@@ -17,66 +17,65 @@ namespace Ppress_Lib.Services
         private OLJobCreation() : base(null, null)  { }
 
 
-        public async Task<int> Process(string[] contentsIds, string job, Dictionary<string,string>? parameters,
+        public async Task<long> Process(long[] contentSetIds, string jobPresetPath, Dictionary<string, string>? parameters,
             OLEvents.SendEventHandler? processEvent = null,
             OLEvents.ProgressEventHandler? progressEvent = null)
         {
             EnsureSessionActive();
 
-            if ((contentsIds.Length == 0) || string.IsNullOrEmpty(job))
+            if (contentSetIds.Length == 0 || string.IsNullOrEmpty(jobPresetPath))
                 throw new ArgumentException("JobCreation Process: Bad arguments");
+
+            long jobPresetId = await client.Services.FileStore.UploadFileAsync(jobPresetPath);
 
             if (processEvent != null) Onsend += processEvent;
             if (progressEvent != null) Onprogress += progressEvent;
             
-            int _contentId;
+            long _contentSetId;
             
             using (HttpClient http = client.GetHttpClientInstance())
             {
-                string _operationId = await SubmitAsync(http, contentsIds, job, parameters);
+                string _operationId = await SubmitAsync(http, contentSetIds, jobPresetId, parameters);
 
                 await GetProgressAsync(http, _operationId);
 
-                _contentId = await GetResultAsync(http, _operationId);
-
+                _contentSetId = await GetResultAsync(http, _operationId);
             }
 
 
             if (processEvent != null) this.Onsend -= processEvent;
             if (progressEvent != null) Onprogress -= progressEvent;
 
-            return _contentId;
-
-
+            return _contentSetId;
         }
 
         public class Config
         {
-            public string[] identifiers { get; set; }
+            public long[] identifiers { get; set; }
             public Dictionary<string, string>? parameters { get; set; }
-            public Config(string[] identifiers, Dictionary<string, string>? parameters)
+            public Config(long[] identifiers, Dictionary<string, string>? parameters)
             {
                 this.identifiers = identifiers;
                 this.parameters = parameters;
             }
         }
 
-        private async Task<string> SubmitAsync(HttpClient http, string[] contentIds, string template, Dictionary<string, string>? parameters)
+        private async Task<string> SubmitAsync(HttpClient http, long[] contentSetIds, long jobPresetId, Dictionary<string, string>? parameters)
         {
             string operationId;
-            Config config = new(contentIds, parameters);
+            Config config = new(contentSetIds, parameters);
             string sConfig = JsonSerializer.Serialize(config);
             try
             {
-                using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, $"{serviceUrl}{template}");
-                req.Content = new StringContent(sConfig,new MediaTypeHeaderValue("application/json"));
+                using HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, $"{serviceUrl}{jobPresetId}");
+                req.Content = new StringContent(sConfig, new MediaTypeHeaderValue("application/json"));
 
                 HttpResponseMessage resp = await http.SendAsync(req);
 
                 if (!resp.IsSuccessStatusCode) 
-                    throw new Exception("ContentCreation can't process this action.");
+                    throw new Exception("JobCreation can't process this action.");
                 if (!resp.Headers.TryGetValues("operationId", out IEnumerable<string>? values))
-                    throw new Exception("ContentCreation can't process this action.");
+                    throw new Exception("JobCreation can't process this action.");
                 operationId = values.FirstOrDefault() ?? "";
                 Onsend?.Invoke(operationId);
                 return operationId;
@@ -85,18 +84,16 @@ namespace Ppress_Lib.Services
             {
                 throw new Exception("unable to process ContentCreation");
             }
-
         }
 
-        public async Task<int> GetResultAsync (HttpClient http,  string operationId)
+        public async Task<long> GetResultAsync (HttpClient http,  string operationId)
         {
-
             try
             {
                 HttpResponseMessage resp = await http.PostAsync($"{serviceUrl}getResult/{operationId}", null);
                 if (!resp.IsSuccessStatusCode)
-                    throw new Exception("ContentCreation is unable to get result");
-                return int.Parse(await resp.Content.ReadAsStringAsync());
+                    throw new Exception("JobCreation is unable to get result");
+                return long.Parse(await resp.Content.ReadAsStringAsync());
             }
             catch (Exception)
             {
@@ -104,7 +101,7 @@ namespace Ppress_Lib.Services
             }
         }
 
-        public async Task<bool> GetProgressAsync (HttpClient http,  string operationId)
+        public async Task<bool> GetProgressAsync (HttpClient http, string operationId)
         {
             int retry = 0;
             bool done = false;
