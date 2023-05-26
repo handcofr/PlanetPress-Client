@@ -23,7 +23,12 @@
             if (jobSetId <= 0 || string.IsNullOrEmpty(outputPresetPath))
                 throw new ArgumentException("JobCreation Process: Bad arguments");
 
-            long outputPresetId = await client.Services.FileStore.UploadFileAsync(outputPresetPath);
+            string outputPreset;
+
+            if (File.Exists(outputPresetPath))
+                outputPreset = (await client.Services.FileStore.UploadFileAsync(outputPresetPath)).ToString();
+            else
+                outputPreset = outputPresetPath;
 
             if (processEvent != null) Onsend += processEvent;
             if (progressEvent != null) Onprogress += progressEvent;
@@ -32,7 +37,7 @@
             
             using (HttpClient http = client.GetHttpClientInstance())
             {
-                string _operationId = await SubmitAsync(http, outputPresetId, jobSetId);
+                string _operationId = await SubmitAsync(http, outputPreset, jobSetId);
 
                 await GetProgressAsync(http, _operationId);
 
@@ -46,7 +51,7 @@
             return true;
         }
 
-        private async Task<string> SubmitAsync(HttpClient http, long outputPresetId, long jobSetId)
+        private async Task<string> SubmitAsync(HttpClient http, string outputPresetId, long jobSetId)
         {
             string operationId;
 

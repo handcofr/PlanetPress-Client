@@ -31,7 +31,7 @@ namespace Ppress_Client
 
             string templatePath = Constants.Template;
             long contentSetId = await client.Services.ContentCreation.Process(templatePath, dataSetId,
-                processEvent: ProcessSend, progressEvent: ProcessProgress);
+                sendEvent: ProcessSend, progressEvent: ProcessProgress);
             Logger.log($"ContentCreation Process\t\tDataSet={dataSetId}, Template={templatePath}, Result Content ID={contentSetId}");
 
 
@@ -40,7 +40,7 @@ namespace Ppress_Client
             Dictionary<string, string> parameters = new();
             parameters.Add("test1", "toto");
             long jobId = await client.Services.JobCreation.Process(contentSetIds, jobPresetPath,
-                parameters, processEvent: ProcessSend, progressEvent: ProcessProgress);
+                parameters, sendEvent: ProcessSend, progressEvent: ProcessProgress);
             Logger.log($"JobCreation Process\t\t\tResult Job ID={jobId}");
 
             using (FileStream file = new(Constants.PDFFilename, FileMode.Create, FileAccess.Write, FileShare.None))

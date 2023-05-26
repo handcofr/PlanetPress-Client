@@ -2,8 +2,12 @@
 
 namespace Ppress_Lib.Services
 {
+    /// <summary>
+    /// Manager class for ContentCreation service
+    /// </summary>
     public class OLContentCreation : OLClientServiceBase
     {
+        // Events
         public event OLEvents.SendEventHandler? Onsend;
         public event OLEvents.ProgressEventHandler? Onprogress;
 
@@ -15,9 +19,18 @@ namespace Ppress_Lib.Services
 
         private OLContentCreation() : base(null, null)  { }
 
-
+        /// <summary>
+        /// Proceed ContentCreation
+        /// </summary>
+        /// <param name="templatePath">Id or name of tempplate</param>
+        /// <param name="dataSetId">DataSet Id</param>
+        /// <param name="validate"></param>
+        /// <param name="sendEvent">On send event</param>
+        /// <param name="progressEvent">Progress event</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
         public async Task<long> Process(string templatePath, long dataSetId, bool validate = false,
-            OLEvents.SendEventHandler? processEvent = null,
+            OLEvents.SendEventHandler? sendEvent = null,
             OLEvents.ProgressEventHandler? progressEvent = null)
         {
             EnsureSessionActive();
@@ -25,39 +38,54 @@ namespace Ppress_Lib.Services
             if (string.IsNullOrEmpty(templatePath) || dataSetId <= 0)
                 throw new ArgumentException("DataMiningProcess: Bad arguments");
 
-            long templateId = await client.Services.FileStore.UploadFileAsync(templatePath);
+            string template;
 
-            if (processEvent != null) Onsend += processEvent;
+            // If file exists localy upload it
+            if (File.Exists(templatePath))
+                template = (await client.Services.FileStore.UploadFileAsync(templatePath)).ToString();
+            else
+                template = templatePath;
+
+            // Set events hooks
+            if (sendEvent != null) Onsend += sendEvent;
             if (progressEvent != null) Onprogress += progressEvent;
             
             long _contentSetId;
             
-            using (HttpClient http = client.GetHttpClientInstance())
+            using (HttpClient httpClient = client.GetHttpClientInstance())
             {
-                string _operationId = await SubmitAsync(http, templateId, dataSetId, validate);
+                string _operationId = await SubmitAsync(httpClient, template, dataSetId, validate);
 
-                await GetProgressAsync(http, _operationId);
+                await GetProgressAsync(httpClient, _operationId);
 
-                _contentSetId = await GetResultAsync(http, _operationId);
+                _contentSetId = await GetResultAsync(httpClient, _operationId);
             }
 
-
-            if (processEvent != null) this.Onsend -= processEvent;
+            // Unset events
+            if (sendEvent != null) this.Onsend -= sendEvent;
             if (progressEvent != null) Onprogress -= progressEvent;
 
             return _contentSetId;
         }
 
-        private async Task<string> SubmitAsync(HttpClient http, long templateId, long dataSetId, bool validate = false)
+        /// <summary>
+        /// Submit ContentCreation request
+        /// </summary>
+        /// <param name="httpClient"></param>
+        /// <param name="template">Template Id or name</param>
+        /// <param name="dataSetId">DataSet Id</param>
+        /// <param name="validate"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
+        private async Task<string> SubmitAsync(HttpClient httpClient, string template, long dataSetId, bool validate = false)
         {
             string _dataSetId = HttpUtility.UrlEncode(dataSetId.ToString());
-            string _templateId = HttpUtility.UrlEncode(templateId.ToString());
+            template = HttpUtility.UrlEncode(template);
             string operationId;
 
             try
             {
-                HttpResponseMessage resp = await http.PostAsync($"{serviceUrl}{_templateId}/{_dataSetId}", null);
-                string buffer = resp.Content.ReadAsStringAsync().Result;
+                HttpResponseMessage resp = await httpClient.PostAsync($"{serviceUrl}{template}/{_dataSetId}", null);
                 if (!resp.IsSuccessStatusCode) 
                     throw new Exception("ContentCreation can't process this action.");
                 if (!resp.Headers.TryGetValues("operationId", out IEnumerable<string>? values))
@@ -72,6 +100,13 @@ namespace Ppress_Lib.Services
             }
         }
 
+        /// <summary>
+        /// Get result of ContentCreation
+        /// </summary>
+        /// <param name="http"></param>
+        /// <param name="operationId"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
         public async Task<long> GetResultAsync (HttpClient http, string operationId)
         {
             try
