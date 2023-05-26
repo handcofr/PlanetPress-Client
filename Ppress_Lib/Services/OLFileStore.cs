@@ -1,16 +1,21 @@
 ﻿using System.Collections.Specialized;
-using System.IO;
 using System.Net.Http.Headers;
-using System.Reflection;
-using System.Text;
 using System.Web;
 
 namespace Ppress_Lib.Services
 {
+    /// <summary>
+    /// Manager class for service FileStore
+    /// </summary>
     public class OLFileStore : OLClientServiceBase
     {
+        // Set of files uploaded we want to delete of the cache on cleanup.
         private readonly ISet<long> uploadedFiles = new HashSet<long>();
 
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="client"></param>
         public OLFileStore(OLClient client)
             : base("filestore", client)
         {
@@ -19,18 +24,25 @@ namespace Ppress_Lib.Services
         /// <summary>
         /// Upload arbitrary file to FileStore
         /// </summary>
-        /// <param name="path"></param>
+        /// <param name="path">Full path of the file</param>
+        /// <param name="cache">Include file or not during cleanup ?</param>
         /// <param name="persistent"></param>
-        /// <param name="named"></param>
-        /// <returns>The ID of file</returns>
-        /// <exception cref="FileNotFoundException"></exception>
+        /// <returns>The Id of file in the FileStore</returns>
+        /// <exception cref="FileNotFoundException">Unable to find file</exception>
         /// <exception cref="Exception"></exception>
-        public async Task<long> UploadFileAsync(string path, bool persistent = false)
+        public async Task<long> UploadFileAsync(string path, bool cache = false, bool persistent = false)
         {
             EnsureSessionActive();
 
-            String urlPath, mimeType;
-            switch (new FileInfo(path).Extension)
+            String urlPath, mimeType, extension;
+            try
+            {
+                extension = new FileInfo(path).Extension;
+            } catch (FileNotFoundException e) {
+                throw e;
+            }
+
+            switch (extension)
             {
                 case ".OL-template":
                     urlPath = "template";
@@ -58,15 +70,19 @@ namespace Ppress_Lib.Services
             NameValueCollection query = HttpUtility.ParseQueryString(uriBuilder.Query);
             if (persistent) query.Add("persistent", persistent.ToString());
             uriBuilder.Query = query.ToString();
-            using HttpClient http = client.GetHttpClientInstance();
+            using HttpClient httpClient = client.GetHttpClientInstance();
 
             try
             {
                 StreamContent content = new(File.OpenRead(path));
                 content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
-                using HttpResponseMessage resp = await http.PostAsync(uriBuilder.ToString(), content);
+                using HttpResponseMessage resp = await httpClient.PostAsync(uriBuilder.ToString(), content);
                 long id = long.Parse(resp.EnsureSuccessStatusCode().Content.ReadAsStringAsync().Result);
-                uploadedFiles.Add(id);
+    
+                // Don't include in the cleanup set if we wan't to keep in server cache
+                if (!cache)
+                    uploadedFiles.Add(id);
+
                 return id;
             }
             catch (HttpRequestException)
@@ -75,6 +91,12 @@ namespace Ppress_Lib.Services
             }
         }
 
+        /// <summary>
+        /// Delete file in FileStore by fileId
+        /// </summary>
+        /// <param name="fileId"></param>
+        /// <returns></returns>
+        /// <exception cref="Exception"></exception>
         public async Task<bool> DeleteFileAsync(long fileId)
         {
             EnsureSessionActive();
@@ -91,6 +113,9 @@ namespace Ppress_Lib.Services
             }
         }
 
+        /// <summary>
+        /// Cleanup uploaded files that not stay in cache
+        /// </summary>
         public async void Cleanup()
         {
             try
@@ -106,6 +131,9 @@ namespace Ppress_Lib.Services
             }
         }
 
+        /// <summary>
+        /// Disable default constructor
+        /// </summary>
         private OLFileStore() : base(null, null)
         {
 
